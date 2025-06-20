@@ -1,0 +1,12 @@
+# Core dependencies
+requests>=2.31.0
+python-dotenv>=1.0.0
+
+# GUI dependencies (tkinter is built-in to Python)
+# Note: tkinterdnd2 is optional and often problematic on macOS
+# tkinterdnd2>=0.3.0  # For drag and drop functionality (optional)
+
+# Other optional dependencies that might be useful
+# pyyaml>=6.0  # For YAML file processing
+# markdown>=3.4.0  # For markdown processing
+# beautifulsoup4>=4.12.0  # For HTML/XML parsing
