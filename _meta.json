@@ -1,0 +1,14 @@
+{
+  "Vedic Astrology": [
+    {
+      "title": "Sample Category",
+      "folder": "sample-category",
+      "children": [
+        {
+          "title": "Sample Page",
+          "path": "sample-page.md"
+        }
+      ]
+    }
+  ]
+}

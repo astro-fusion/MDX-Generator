@@ -53,8 +53,18 @@ def generate_index_from_meta(meta_file='_meta.json', output_file='index.mdx'):
     """Generate index.mdx file from the meta.json structure"""
     
     # Load meta data
-    with open(meta_file, 'r', encoding='utf-8') as f:
-        meta_data = json.load(f)
+    try:
+        if not os.path.exists(meta_file):
+            print(f"Warning: {meta_file} not found. Creating a default file.")
+            with open(meta_file, 'w', encoding='utf-8') as f:
+                json.dump({"Vedic Astrology": []}, f, indent=2)
+        
+        with open(meta_file, 'r', encoding='utf-8') as f:
+        try:
+            meta_data = json.load(f)
+        except json.JSONDecodeError:
+            print(f"Error: {meta_file} contains invalid JSON. Using default empty structure.")
+            meta_data = {"Vedic Astrology": []}
     
     # Start building the index content
     content = [

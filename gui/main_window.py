@@ -170,6 +170,9 @@ class MainWindow:
         status_bar = ttk.Label(master, textvariable=self.status_var, relief=tk.SUNKEN, anchor=tk.W)
         status_bar.pack(side=tk.BOTTOM, fill=tk.X)
         
+        # Start the message processing timer
+        self.master.after(100, self._process_thread_messages)
+        
         # Start periodic thread checker (after 10 seconds)
         self.master.after(10000, self._check_running_threads)
     
@@ -520,26 +523,42 @@ class MainWindow:
         # Log the start
         self.log_viewer.append_log(f"Starting Step {module_info['order']}: {module_info['display_name']}", "INFO")
         
-        # Create a thread for processing
-        thread = run_module_async(
+        # Create a thread info structure for processing
+        thread_info = run_module_async(
             module_info,
-            self.selected_directory,
-            progress_var=step['progress_var'],
-            status_var=step['status_var']
+            self.selected_directory
         )
         
-        # Store thread reference
-        self.running_threads[step_index] = thread
-        
-        # Create a monitoring thread to update UI when complete
-        monitor_thread = threading.Thread(
-            target=self._monitor_step_completion,
-            args=(step_index, module_info),
-            daemon=True
-        )
-        monitor_thread.start()
+        # Store thread info
+        self.running_threads[step_index] = thread_info
     
     def _monitor_step_completion(self, step_index, module_info):
+        """Monitor a step thread for completion and update the UI."""
+        import time
+        thread = self.running_threads.get(step_index)
+        if not thread:
+            return
+        
+        try:
+            # Wait for the thread with a timeout (prevent infinite waiting)
+            MAX_WAIT_TIME = 30  # 30 seconds max before considering it stuck
+            thread_obj = thread.get("worker_thread")
+            if thread_obj:
+                thread_obj.join(timeout=MAX_WAIT_TIME)
+                
+                if thread_obj.is_alive():
+                    # Thread is still running after timeout
+                    print(f"Module {module_info['display_name']} may be stuck, forcing UI update")
+                    # Force update UI
+                    self.master.after(0, lambda: self._update_step_error_ui(step_index, module_info, "Operation timed out or became unresponsive"))
+                else:
+                    # Thread completed normally
+                    self.master.after(0, lambda: self._update_step_complete_ui(step_index, module_info))
+            else:
+                self.master.after(0, lambda: self._update_step_error_ui(step_index, module_info, "Thread information missing"))
+        except Exception as e:
+            print(f"Error monitoring thread for {module_info['display_name']}: {str(e)}")
+            self.master.after(0, lambda: self._update_step_error_ui(step_index, module_info, str(e)))
         """Monitor a step thread for completion and update the UI."""
         thread = self.running_threads.get(step_index)
         if not thread:
@@ -624,12 +643,16 @@ class MainWindow:
     
     def stop_step(self, step_index):
         """Stop a running processing step."""
-        thread = self.running_threads.get(step_index)
-        if not thread or not hasattr(thread, 'stop_event'):
+        thread_info = self.running_threads.get(step_index)
+        if not thread_info:
             return
         
+        stop_event = thread_info.get('stop_event')
+        if not stop_event:
+            return
+            
         # Set stop event
-        thread.stop_event.set()
+        stop_event.set()
         
         # Update UI
         step = self.steps[step_index]
@@ -779,13 +802,89 @@ class MainWindow:
     
     def _check_running_threads(self):
         """Periodically check running threads to detect stuck operations."""
-        for step_index, thread in list(self.running_threads.items()):
-            if not thread.is_alive():
-                # Thread is no longer alive, but wasn't properly handled
-                step = self.steps[step_index]
-                module_info = step['module']
-                self.log_viewer.append_log(f"Thread for {module_info['display_name']} exited unexpectedly", "WARNING")
-                self._update_step_complete_ui(step_index, module_info)
+        for step_index, thread_info in list(self.running_threads.items()):
+            try:
+                # Check if worker thread is still alive but may be stuck
+                worker_thread = thread_info.get('worker_thread')
+                last_heartbeat = thread_info.get('last_heartbeat', [0])[0]
+                
+                # If no heartbeat for 60 seconds, thread is likely stuck
+                if worker_thread and time.time() - last_heartbeat > 60:
+                    module_info = thread_info.get('module_info')
+                    self.log_viewer.append_log(f"Thread for {module_info['display_name']} appears stuck - forcing termination", "ERROR")
+                    
+                    # Force UI update to show error
+                    self._update_step_timeout_ui(step_index, module_info)
+            except Exception as e:
+                logger.error(f"Error checking thread: {str(e)}", exc_info=True)
         
         # Schedule next check
         self.master.after(5000, self._check_running_threads)
+    
+    def _process_thread_messages(self):
+        """Process messages from worker threads to update UI safely."""
+        # Process queue messages from all running threads
+        for step_index, thread_info in list(self.running_threads.items()):
+            try:
+                # Get message queue
+                message_queue = thread_info.get('message_queue')
+                if not message_queue:
+                    continue
+                
+                # Process all pending messages (non-blocking)
+                while True:
+                    try:
+                        # Get message with small timeout to prevent blocking
+                        msg_type, msg_value = message_queue.get(block=False)
+                        
+                        # Update last heartbeat time
+                        if 'last_heartbeat' in thread_info:
+                            thread_info['last_heartbeat'][0] = time.time()
+                        
+                        # Process message based on type
+                        if msg_type == 'progress':
+                            step = self.steps[step_index]
+                            step['progress_var'].set(msg_value)
+                        elif msg_type == 'status':
+                            step = self.steps[step_index]
+                            step['status_var'].set(msg_value)
+                        elif msg_type == 'heartbeat':
+                            # Just update the heartbeat time
+                            pass
+                            
+                        # Mark message as processed
+                        message_queue.task_done()
+                        
+                    except queue.Empty:
+                        # No more messages
+                        break
+                    
+                # Check if worker thread is still alive
+                worker_thread = thread_info.get('worker_thread')
+                if worker_thread and not worker_thread.is_alive() and thread_info.get('thread_active')[0] == False:
+                    # Thread is complete, update UI
+                    module_info = thread_info.get('module_info')
+                    self._update_step_complete_ui(step_index, module_info)
+                    
+                # Check for heartbeat timeout (30 seconds)
+                last_heartbeat = thread_info.get('last_heartbeat', [0])[0]
+                if time.time() - last_heartbeat > 30 and thread_info.get('thread_active')[0]:
+                    # Thread appears stuck, log warning and potentially stop it
+                    module_info = thread_info.get('module_info')
+                    logger.warning(f"Thread for {module_info['display_name']} may be stuck - no updates for 30 seconds")
+                    self.log_viewer.append_log(f"Thread for {module_info['display_name']} may be stuck - attempting to stop", "WARNING")
+                    
+                    # Try to stop the thread
+                    stop_event = thread_info.get('stop_event')
+                    if stop_event:
+                        stop_event.set()
+                    
+                    # Update UI to show timeout warning
+                    step = self.steps[step_index]
+                    step['status_var'].set("Warning: Operation may be stuck...")
+                    
+            except Exception as e:
+                logger.error(f"Error processing thread messages: {str(e)}", exc_info=True)
+        
+        # Schedule next check (15ms, fast enough for UI responsiveness)
+        self.master.after(15, self._process_thread_messages)

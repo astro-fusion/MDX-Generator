@@ -11,6 +11,8 @@ import re
 from typing import List, Dict, Any, Callable, Optional
 import sys
 import threading
+import queue
+import time
 
 from utils.logging_utils import get_logger
 
@@ -49,6 +51,9 @@ def get_core_modules() -> List[Dict[str, Any]]:
     
     # Define core module directory
     core_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "src", "core")
+    # Fallback to direct core directory if src/core doesn't exist
+    if not os.path.exists(core_dir):
+        core_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "core")
     
     # Create core directory if it doesn't exist
     if not os.path.exists(core_dir):
@@ -125,7 +130,7 @@ def adapt_core_module_for_gui(module_info: Dict[str, Any]) -> Optional[Callable]
             if candidates:
                 main_func = getattr(module, candidates[0])
             else:
-                logger.error(f"No main function found in module {module_name}")
+                logger.error(f"No main function found in module {module_name}. Available functions: {[name for name, func in inspect.getmembers(module, inspect.isfunction)]}")
                 return None
         
         # Create a wrapper function that provides progress updates
@@ -190,10 +195,13 @@ def run_module_async(module_info, directory, progress_var=None, status_var=None)
         status_var: tkinter variable for status updates
         
     Returns:
-        threading.Thread: The thread running the module
+        dict: Contains thread object and message queue for communication
     """
     # Create a stop event for cancellation
     stop_event = threading.Event()
+    
+    # Create a message queue for thread communication
+    message_queue = queue.Queue()
     
     # Create wrapper function for the module
     module_func = adapt_core_module_for_gui(module_info)
@@ -203,14 +211,23 @@ def run_module_async(module_info, directory, progress_var=None, status_var=None)
             status_var.set(f"Error: Module {module_info['display_name']} not found")
         return None
     
+    # Create heartbeat mechanism
+    last_heartbeat = [time.time()]
+    
     # Create progress and status callback functions
     def update_progress(value):
         if progress_var and not stop_event.is_set():
-            progress_var.set(value)
+            # Instead of directly updating, put in queue
+            message_queue.put(('progress', value))
+            # Update heartbeat
+            last_heartbeat[0] = time.time()
     
     def update_status(message):
         if status_var and not stop_event.is_set():
-            status_var.set(message)
+            # Instead of directly updating, put in queue
+            message_queue.put(('status', message))
+            # Update heartbeat
+            last_heartbeat[0] = time.time()
     
     # Create the actual thread function with exception handling
     def run_with_timeout():
@@ -219,7 +236,26 @@ def run_module_async(module_info, directory, progress_var=None, status_var=None)
             update_status("Initializing...")
             update_progress(5)  # Show some initial progress
             
-            # Start execution with timeout monitoring
+            # Regular heartbeat updates even if module doesn't report progress
+            while not stop_event.is_set():
+                # Check if execution is still ongoing
+                if not thread_active[0]:
+                    break
+                    
+                # Send heartbeat every 1 second
+                message_queue.put(('heartbeat', time.time()))
+                time.sleep(1)
+                
+        except Exception as e:
+            logger.error(f"Heartbeat error: {str(e)}", exc_info=True)
+    
+    # Create actual worker function
+    def worker_function():
+        try:
+            # Mark thread as active
+            thread_active[0] = True
+            
+            # Start execution
             result = module_func(directory, update_progress, update_status, stop_event)
             
             # Ensure final progress is at 100% if successful
@@ -235,13 +271,38 @@ def run_module_async(module_info, directory, progress_var=None, status_var=None)
             logger.error(f"Error in module {module_info['display_name']}: {str(e)}", exc_info=True)
             if not stop_event.is_set():
                 update_status(f"Error: {str(e)[:50]}...")
+        finally:
+            # Mark thread as inactive
+            thread_active[0] = False
     
-    # Create and start the thread
-    thread = threading.Thread(
+    # Thread active flag (in list to make it mutable from inner functions)
+    thread_active = [False]
+    
+    # Create and start the worker thread
+    worker_thread = threading.Thread(
+        target=worker_function,
+        daemon=True
+    )
+    
+    # Create and start the heartbeat thread
+    heartbeat_thread = threading.Thread(
         target=run_with_timeout,
         daemon=True
     )
-    thread.stop_event = stop_event  # Attach stop event to the thread for later access
-    thread.start()
     
-    return thread
+    # Store thread info
+    thread_info = {
+        'worker_thread': worker_thread,
+        'heartbeat_thread': heartbeat_thread,
+        'stop_event': stop_event,
+        'message_queue': message_queue,
+        'last_heartbeat': last_heartbeat,
+        'thread_active': thread_active,
+        'module_info': module_info
+    }
+    
+    # Start threads
+    worker_thread.start()
+    heartbeat_thread.start()
+    
+    return thread_info
