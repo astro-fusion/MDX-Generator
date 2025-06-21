@@ -184,125 +184,78 @@ def adapt_core_module_for_gui(module_info: Dict[str, Any]) -> Optional[Callable]
         return None
 
 # Function to run a module in a separate thread with progress and status updates
-def run_module_async(module_info, directory, progress_var=None, status_var=None):
+def run_module_async(module_info, directory, progress_var=None, status_var=None, 
+                   stop_event=None, message_queue=None):
     """
-    Run a core module asynchronously with progress and status updates.
+    Run a module in a separate thread with progress and status updates.
     
     Args:
-        module_info (Dict): Module information dictionary
-        directory (str): Target directory to process
-        progress_var: tkinter variable for progress updates
-        status_var: tkinter variable for status updates
-        
-    Returns:
-        dict: Contains thread object and message queue for communication
+        module_info (dict): Module information
+        directory (str): Directory to process
+        progress_var: Tkinter variable to update with progress
+        status_var: Tkinter variable to update with status
+        stop_event: Threading event to signal stopping
+        message_queue: Queue to send messages back to main thread
     """
-    # Create a stop event for cancellation
-    stop_event = threading.Event()
-    
-    # Create a message queue for thread communication
-    message_queue = queue.Queue()
-    
-    # Create wrapper function for the module
-    module_func = adapt_core_module_for_gui(module_info)
-    
-    if not module_func:
+    try:
+        # Update status
         if status_var:
-            status_var.set(f"Error: Module {module_info['display_name']} not found")
-        return None
-    
-    # Create heartbeat mechanism
-    last_heartbeat = [time.time()]
-    
-    # Create progress and status callback functions
-    def update_progress(value):
-        if progress_var and not stop_event.is_set():
-            # Instead of directly updating, put in queue
-            message_queue.put(('progress', value))
-            # Update heartbeat
-            last_heartbeat[0] = time.time()
-    
-    def update_status(message):
-        if status_var and not stop_event.is_set():
-            # Instead of directly updating, put in queue
-            message_queue.put(('status', message))
-            # Update heartbeat
-            last_heartbeat[0] = time.time()
-    
-    # Create the actual thread function with exception handling
-    def run_with_timeout():
+            status_var.set(f"Starting {module_info['display_name']}...")
+        
+        # Get the module's main function
+        main_func = module_info.get('func')
+        
+        if not main_func:
+            if status_var:
+                status_var.set(f"Error: No main function for {module_info['display_name']}")
+            logger.error(f"No main function for {module_info['display_name']}")
+            return False
+        
+        # Add a custom logging handler using the message queue if provided
+        if message_queue:
+            def send_log_message(msg, level="INFO"):
+                try:
+                    message_queue.put(("log", (level, msg)))
+                except:
+                    pass
+        else:
+            send_log_message = lambda msg, level: None
+            
+        send_log_message(f"Running {module_info['display_name']} on {directory}", "INFO")
+        
+        # Try different ways to call the main function based on its signature
         try:
-            # Set initial status
-            update_status("Initializing...")
-            update_progress(5)  # Show some initial progress
+            # Get number of parameters the function expects
+            import inspect
+            sig = inspect.signature(main_func)
+            param_count = len(sig.parameters)
             
-            # Regular heartbeat updates even if module doesn't report progress
-            while not stop_event.is_set():
-                # Check if execution is still ongoing
-                if not thread_active[0]:
-                    break
-                    
-                # Send heartbeat every 1 second
-                message_queue.put(('heartbeat', time.time()))
-                time.sleep(1)
-                
-        except Exception as e:
-            logger.error(f"Heartbeat error: {str(e)}", exc_info=True)
-    
-    # Create actual worker function
-    def worker_function():
-        try:
-            # Mark thread as active
-            thread_active[0] = True
-            
-            # Start execution
-            result = module_func(directory, update_progress, update_status, stop_event)
-            
-            # Ensure final progress is at 100% if successful
-            if result and not stop_event.is_set():
-                update_progress(100)
-                update_status("Completed")
-            elif stop_event.is_set():
-                update_status("Stopped by user")
+            # Call with appropriate number of arguments
+            if param_count >= 4:
+                result = main_func(directory, progress_var, status_var, stop_event)
+            elif param_count == 3:
+                result = main_func(directory, progress_var, status_var)
+            elif param_count == 2:
+                result = main_func(directory, progress_var)
             else:
-                update_status("Failed")
+                result = main_func(directory)
                 
+            # Update status
+            if status_var:
+                status_var.set(f"Completed {module_info['display_name']}")
+                
+            send_log_message(f"Completed {module_info['display_name']} with result: {result}", "INFO")
+            return result
+            
         except Exception as e:
-            logger.error(f"Error in module {module_info['display_name']}: {str(e)}", exc_info=True)
-            if not stop_event.is_set():
-                update_status(f"Error: {str(e)[:50]}...")
-        finally:
-            # Mark thread as inactive
-            thread_active[0] = False
-    
-    # Thread active flag (in list to make it mutable from inner functions)
-    thread_active = [False]
-    
-    # Create and start the worker thread
-    worker_thread = threading.Thread(
-        target=worker_function,
-        daemon=True
-    )
-    
-    # Create and start the heartbeat thread
-    heartbeat_thread = threading.Thread(
-        target=run_with_timeout,
-        daemon=True
-    )
-    
-    # Store thread info
-    thread_info = {
-        'worker_thread': worker_thread,
-        'heartbeat_thread': heartbeat_thread,
-        'stop_event': stop_event,
-        'message_queue': message_queue,
-        'last_heartbeat': last_heartbeat,
-        'thread_active': thread_active,
-        'module_info': module_info
-    }
-    
-    # Start threads
-    worker_thread.start()
-    heartbeat_thread.start()
-    
-    return thread_info
+            logger.error(f"Error running {module_info['display_name']}: {str(e)}", exc_info=True)
+            if status_var:
+                status_var.set(f"Error: {str(e)}")
+            
+            send_log_message(f"Error in {module_info['display_name']}: {str(e)}", "ERROR")
+            return False
+    except Exception as e:
+        logger.error(f"Error setting up {module_info['display_name']}: {str(e)}", exc_info=True)
+        if status_var:
+            status_var.set(f"Error: {str(e)}")
+        return False

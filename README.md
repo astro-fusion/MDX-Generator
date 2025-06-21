@@ -167,17 +167,21 @@ python main.py
 
 For automation and scripting, use the CLI tools directly:
 
-#### Normalize Filenames
+#### 00 - Normalize Filenames
+Converts filenames to URL-friendly format by removing special characters and standardizing naming conventions.
 
 ```bash
-# Process a specific directory
-python core/00_normalize_filenames.py /path/to/your/content/directory
-
-# Process all subdirectories in current location
+# Scan current directory
 python core/00_normalize_filenames.py
 
-# With custom options
-python core/00_normalize_filenames.py --directory /path/to/content --backup --verbose
+# Scan specific directory
+python core/00_normalize_filenames.py /path/to/directory
+
+# Dry run to just see what would change
+python core/00_normalize_filenames.py /path/to/directory --dry-run
+
+# Skip confirmation prompt
+python core/00_normalize_filenames.py /path/to/directory --yes
 ```
 
 #### Organize by Topics

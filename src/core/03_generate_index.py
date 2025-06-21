@@ -60,11 +60,15 @@ def generate_index_from_meta(meta_file='_meta.json', output_file='index.mdx'):
                 json.dump({"Vedic Astrology": []}, f, indent=2)
         
         with open(meta_file, 'r', encoding='utf-8') as f:
-        try:
-            meta_data = json.load(f)
-        except json.JSONDecodeError:
-            print(f"Error: {meta_file} contains invalid JSON. Using default empty structure.")
-            meta_data = {"Vedic Astrology": []}
+            try:  # Fixed: properly indented try block
+                meta_data = json.load(f)
+            except json.JSONDecodeError:
+                print(f"Error: {meta_file} contains invalid JSON. Using default empty structure.")
+                meta_data = {"Vedic Astrology": []}
+    
+    except Exception as e:
+        print(f"Error reading or creating meta file: {str(e)}")
+        meta_data = {"Vedic Astrology": []}
     
     # Start building the index content
     content = [
@@ -147,4 +151,3 @@ def get_category_description(category_name):
 if __name__ == "__main__":
     generate_index_from_meta()
     print("Index.mdx generation complete!")
-    

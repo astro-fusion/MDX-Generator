@@ -16,13 +16,20 @@ The script will attempt to change such lines to the correct YAML syntax:
   title: 'Some Text''s with an apostrophe'
 
 Usage:
-    python 01a_fix_mdx_frontmatter.py [root_directory_to_scan]
+    python 02_fix_mdx_frontmatter.py [root_directory_to_scan] [options]
 
-Example (scan './content' directory):
-    python 01a_fix_mdx_frontmatter.py ./content
+Examples:
+    # Scan current directory
+    python 02_fix_mdx_frontmatter.py
 
-Example (scan current directory and subdirectories):
-    python 01a_fix_mdx_frontmatter.py
+    # Scan specific directory
+    python 02_fix_mdx_frontmatter.py ./content
+
+    # Dry run to just see what would change
+    python 02_fix_mdx_frontmatter.py ./content --dry-run
+
+    # Skip confirmation prompt
+    python 02_fix_mdx_frontmatter.py ./content --yes
 
 **IMPORTANT: Always back up your files before running this script,
 as it modifies files in place.**
@@ -33,6 +40,7 @@ import re
 import yaml
 from pathlib import Path
 import argparse
+import sys
 
 # Pattern to extract the whole frontmatter block (---...---)
 FRONTMATTER_BLOCK_PATTERN = re.compile(r'^(---[^\S\r\n]*\n.*?\n---[^\S\r\n]*\n)', re.DOTALL | re.MULTILINE)
@@ -63,21 +71,27 @@ def fix_yaml_line_for_quotes(line_text):
             return f"{prefix}'{fixed_value}'{suffix}"
     return line_text # Return original line if no change needed or not matching pattern
 
-def process_mdx_file(file_path: Path):
+def process_mdx_file(file_path: Path, dry_run=False):
     """
     Processes a single MD or MDX file to fix its YAML frontmatter if needed.
-    Returns True if the file was modified, False otherwise.
+    
+    Args:
+        file_path (Path): Path to the MD/MDX file
+        dry_run (bool): If True, only analyze without making changes
+        
+    Returns:
+        tuple: (was_modified, needs_fix, has_error) - Boolean flags indicating file status
     """
     try:
         original_content = file_path.read_text(encoding='utf-8')
     except Exception as e:
         print(f"⛔ Error reading {file_path}: {e}")
-        return False
+        return False, False, True
 
     fm_block_match = FRONTMATTER_BLOCK_PATTERN.match(original_content)
     if not fm_block_match:
-        # print(f"ℹ️ No frontmatter block found in {file_path}")
-        return False
+        # No frontmatter block found
+        return False, False, False
 
     original_frontmatter_block = fm_block_match.group(1)
     
@@ -85,14 +99,13 @@ def process_mdx_file(file_path: Path):
     if not fm_content_match:
         # This should not happen if fm_block_match succeeded, but as a safeguard:
         print(f"⚠️ Could not extract frontmatter content from block in {file_path}")
-        return False
+        return False, False, True
         
     raw_frontmatter_content = fm_content_match.group(1)
 
     try:
         yaml.safe_load(raw_frontmatter_content)
-        # print(f"✅ Frontmatter in {file_path} is already valid.")
-        return False # Already valid
+        return False, False, False  # Already valid, no changes needed
     except yaml.YAMLError as e:
         error_str = str(e)
         # Check for the specific error related to unescaped quotes
@@ -103,9 +116,9 @@ def process_mdx_file(file_path: Path):
         )
 
         if is_target_error:
-            print(f"⚠️ Potential quote issue found in {file_path}. Attempting fix...")
-            # print(f"   Error details: {error_str.splitlines()[0]}") # Print first line of error
-
+            if not dry_run:
+                print(f"⚠️ Potential quote issue found in {file_path}. Attempting fix...")
+            
             fixed_fm_lines = []
             modified_in_lines = False
             for line in raw_frontmatter_content.splitlines():
@@ -122,6 +135,10 @@ def process_mdx_file(file_path: Path):
                 try:
                     yaml.safe_load(fixed_fm_content_string)
                     
+                    # If in dry run mode, just report that this file would be fixed
+                    if dry_run:
+                        return False, True, False
+                    
                     # Reconstruct the full frontmatter block with corrected content
                     new_frontmatter_block = f"---\n{fixed_fm_content_string}\n---"
                     
@@ -131,18 +148,68 @@ def process_mdx_file(file_path: Path):
                     
                     file_path.write_text(new_file_content, encoding='utf-8')
                     print(f"🛠️ Successfully fixed and saved frontmatter for {file_path}")
-                    return True
+                    return True, False, False
                 except yaml.YAMLError as e_after_fix:
-                    print(f"⛔ Error parsing frontmatter in {file_path} even after attempting fix: {e_after_fix}")
-                    print(f"   Original raw frontmatter content:\n{raw_frontmatter_content}")
-                    print(f"   Attempted fixed frontmatter content:\n{fixed_fm_content_string}")
-                    return False
+                    if not dry_run:
+                        print(f"⛔ Error parsing frontmatter in {file_path} even after attempting fix: {e_after_fix}")
+                        print(f"   Original raw frontmatter content:\n{raw_frontmatter_content}")
+                        print(f"   Attempted fixed frontmatter content:\n{fixed_fm_content_string}")
+                    return False, False, True
             else:
-                # print(f"ℹ️ No applicable fix made to {file_path} for the identified error type (lines unchanged).")
-                return False
+                return False, False, False
         else:
-            # print(f"ℹ️ Skipping {file_path}, different YAML error encountered: {error_str.splitlines()[0]}")
-            return False
+            # Different YAML error encountered, not the target we fix
+            return False, False, True
+
+def scan_directory(root_path: Path, dry_run=False):
+    """
+    Scans a directory recursively for MD/MDX files and analyzes/fixes frontmatter issues.
+    
+    Args:
+        root_path (Path): Directory to scan
+        dry_run (bool): If True, only analyze without making changes
+        
+    Returns:
+        dict: Statistics about the scan results
+    """
+    stats = {
+        "total_files_found": 0,
+        "files_with_no_frontmatter": 0,
+        "files_with_valid_frontmatter": 0,
+        "files_needing_fix": 0,
+        "files_with_other_errors": 0,
+        "files_successfully_fixed": 0
+    }
+    
+    files_to_scan = []
+    for pattern in ['*.mdx', '*.md']:
+        files_to_scan.extend(root_path.rglob(pattern))
+    
+    # Remove duplicates and sort for consistent processing order
+    unique_files_to_process = sorted(list(set(files_to_scan)))
+    
+    stats["total_files_found"] = len(unique_files_to_process)
+
+    if not unique_files_to_process:
+        print(f"ℹ️ No .md or .mdx files found in {root_path}.")
+        return stats
+
+    for target_file in unique_files_to_process:
+        was_modified, needs_fix, has_error = process_mdx_file(target_file, dry_run=dry_run)
+        
+        if was_modified:
+            stats["files_successfully_fixed"] += 1
+        elif needs_fix:
+            stats["files_needing_fix"] += 1
+        elif has_error:
+            stats["files_with_other_errors"] += 1
+        else:
+            if FRONTMATTER_BLOCK_PATTERN.match(target_file.read_text(encoding='utf-8')):
+                stats["files_with_valid_frontmatter"] += 1
+            else:
+                stats["files_with_no_frontmatter"] += 1
+                
+    return stats
 
 def main():
     parser = argparse.ArgumentParser(
@@ -156,6 +223,16 @@ def main():
         default='.',
         help='The root directory to scan for MD/MDX files (e.g., ./content). Defaults to current directory if not specified.'
     )
+    parser.add_argument(
+        "--dry-run", "-d", 
+        action="store_true",
+        help="Only scan and report files that would be fixed without actually modifying them"
+    )
+    parser.add_argument(
+        "--yes", "-y", 
+        action="store_true",
+        help="Skip confirmation and proceed with fixing files"
+    )
     args = parser.parse_args()
 
     root_path = Path(args.root_dir).resolve() # Resolve to get absolute path
@@ -163,37 +240,43 @@ def main():
         print(f"⛔ Error: '{root_path}' is not a valid directory.")
         return
 
-    print(f"🚀 Starting scan in directory: {root_path}")
+    print(f"🔍 Scanning directory: {root_path}")
     print("---")
     
-    fixed_files_count = 0
-    processed_files_count = 0
+    # Initial dry run to gather statistics
+    stats = scan_directory(root_path, dry_run=True)
     
-    files_to_scan = []
-    for pattern in ['*.mdx', '*.md']:
-        files_to_scan.extend(root_path.rglob(pattern))
+    # Display scan statistics
+    print(f"\n--- Scan Results ---")
+    print(f"Total .md and .mdx files found: {stats['total_files_found']}")
+    print(f"Files with no frontmatter: {stats['files_with_no_frontmatter']}")
+    print(f"Files with valid frontmatter: {stats['files_with_valid_frontmatter']}")
+    print(f"Files needing fixes: {stats['files_needing_fix']}")
+    print(f"Files with other YAML errors: {stats['files_with_other_errors']}")
     
-    # Remove duplicates (e.g. if a file is somehow .md and .mdx, though unlikely)
-    # and sort for consistent processing order
-    unique_files_to_process = sorted(list(set(files_to_scan)))
+    # If it's just a dry run, we're done
+    if args.dry_run:
+        print("\n🔍 Dry run completed. No files were modified.")
+        sys.exit(0)
     
-    total_target_files_found = len(unique_files_to_process)
-
-    if not unique_files_to_process:
-        print(f"ℹ️ No .md or .mdx files found in {root_path}.")
-        return
-
-    for target_file in unique_files_to_process:
-        # print(f"\nProcessing: {target_file}") # Uncomment for verbose per-file processing start
-        if process_mdx_file(target_file): # Function name kept for simplicity, handles both
-            fixed_files_count += 1
-        processed_files_count +=1 
-    
-    print(f"\n--- Scan Complete ---")
-    print(f"Total .md and .mdx files found: {total_target_files_found}")
-    print(f"Total files processed for potential fixes: {processed_files_count}")
-    print(f"Total files successfully fixed and saved: {fixed_files_count}")
-    print(f"---------------------")
+    # If files need fixes, get confirmation unless --yes flag is set
+    if stats['files_needing_fix'] > 0:
+        if not args.yes:
+            confirm = input(f"\n🔧 Ready to fix {stats['files_needing_fix']} files. Proceed? [y/N]: ")
+            if confirm.lower() not in ('y', 'yes'):
+                print("❌ Operation cancelled.")
+                sys.exit(0)
+        
+        # Proceed with actual fixing
+        print(f"\n🚀 Proceeding to fix {stats['files_needing_fix']} files...")
+        fix_stats = scan_directory(root_path, dry_run=False)
+        
+        # Display final statistics
+        print(f"\n--- Final Results ---")
+        print(f"Files successfully fixed: {fix_stats['files_successfully_fixed']}")
+        print(f"Files that couldn't be fixed: {stats['files_needing_fix'] - fix_stats['files_successfully_fixed']}")
+    else:
+        print("\n✅ No files need fixing!")
 
 if __name__ == "__main__":
     main()

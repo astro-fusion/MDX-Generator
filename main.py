@@ -8,6 +8,7 @@ A GUI application for processing and fixing MDX files generated from AI outputs.
 import os
 import sys
 from utils.logging_utils import setup_logger, set_gui_log_callback
+from utils.settings import update_last_directory, get_last_directory
 
 def setup_emergency_exit():
     """Set up emergency exit after 10 minutes to prevent zombies."""
@@ -60,13 +61,32 @@ def main():
             dir_entry = tk.Entry(dir_frame, textvariable=dir_var)
             dir_entry.pack(side="left", fill="x", expand=True)
             
+            # Add a "Load Last Directory" button
+            last_dir = get_last_directory()
+            
+            def load_last_directory():
+                last_dir = get_last_directory()
+                if last_dir:
+                    dir_var.set(last_dir)
+                    log_message(f"Loaded last directory: {last_dir}")
+                else:
+                    log_message("No previous directory found")
+            
             def browse():
                 from tkinter import filedialog
                 directory = filedialog.askdirectory()
                 if directory:
                     dir_var.set(directory)
+                    update_last_directory(directory)
             
-            tk.Button(dir_frame, text="Browse", command=browse).pack(side="left", padx=5)
+            button_frame = tk.Frame(dir_frame)
+            button_frame.pack(side="left")
+            
+            tk.Button(button_frame, text="Browse", command=browse).pack(side="left", padx=5)
+            
+            # Only show the "Last Dir" button if a last directory exists
+            if last_dir:
+                tk.Button(button_frame, text="Last Dir", command=load_last_directory).pack(side="left")
             
             # Function selection
             tk.Label(frame, text="\nSelect function to execute:", anchor="w").pack(fill="x", pady=(20, 5))
@@ -104,6 +124,9 @@ def main():
                     log_message("Error: Invalid directory")
                     return
                 
+                # Save the directory as the last used directory
+                update_last_directory(directory)
+                
                 log_message(f"Running {selected_func} on {directory}...")
                 
                 try:
@@ -137,6 +160,11 @@ def main():
                 log_message(f"[{level}] {message}")
             
             set_gui_log_callback(log_to_gui)
+            
+            # If last directory exists, set it in the entry
+            if last_dir:
+                dir_var.set(last_dir)
+                log_message(f"Loaded last directory: {last_dir}")
         else:
             # Import MainWindow after root is created
             from gui.main_window import MainWindow
