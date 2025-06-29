@@ -210,39 +210,58 @@ def print_summary(success, stats, errors):
         print("\n✅ All referenced files exist and structure is valid!")
 
 
+def find_all_meta_files(root_dir):
+    """Recursively find all _meta.json files under root_dir."""
+    meta_files = []
+    for dirpath, _, filenames in os.walk(root_dir):
+        for fname in filenames:
+            if fname == "_meta.json":
+                meta_files.append(os.path.join(dirpath, fname))
+    return meta_files
+
+
 def main():
-    # Parse command line arguments
     parser = argparse.ArgumentParser(
-        description="Validate the structure defined in a _meta.json file against the filesystem.",
+        description="Validate all _meta.json files in a directory tree against the filesystem.",
         formatter_class=argparse.RawTextHelpFormatter
     )
     parser.add_argument(
-        'meta_file',
+        'meta_file_or_dir',
         nargs='?',
         default="_meta.json",
-        help="Path to the meta.json file (default: ./_meta.json)"
+        help="Path to a _meta.json file or a directory to scan recursively (default: ./_meta.json)"
     )
     parser.add_argument(
         "--base-dir", "-b",
-        help="Base directory to resolve file paths against (default: directory containing meta_file)"
+        help="Base directory to resolve file paths against (default: directory containing each meta_file)"
     )
     parser.add_argument(
         "--top-key", "-t",
         default="Documentation",
         help="Top-level key in the meta.json file (default: 'Documentation')"
     )
-    
     args = parser.parse_args()
-    
-    # Validate the meta.json
-    success, stats, errors = validate_meta_json(args.meta_file, args.base_dir, args.top_key)
-    
-    # Print summary
-    print_summary(success, stats, errors)
-    
-    # Return appropriate exit code
-    sys.exit(0 if success else 1)
 
+    meta_path = Path(args.meta_file_or_dir).resolve()
 
-if __name__ == "__main__":
-    main()
+    # If a directory, scan for all _meta.json files
+    if meta_path.is_dir():
+        meta_files = find_all_meta_files(meta_path)
+        if not meta_files:
+            print(f"⚠️ No _meta.json files found in {meta_path}")
+            sys.exit(1)
+        overall_success = True
+        for meta_file in meta_files:
+            print(f"\n{'='*60}\nValidating: {meta_file}")
+            # Use the parent folder as base_dir unless overridden
+            base_dir = args.base_dir if args.base_dir else str(Path(meta_file).parent)
+            success, stats, errors = validate_meta_json(meta_file, base_dir, args.top_key)
+            print_summary(success, stats, errors)
+            if not success:
+                overall_success = False
+        sys.exit(0 if overall_success else 1)
+    else:
+        # Single file mode (original behavior)
+        success, stats, errors = validate_meta_json(meta_path, args.base_dir, args.top_key)
+        print_summary(success, stats, errors)
+        sys.exit(0 if success else 1)

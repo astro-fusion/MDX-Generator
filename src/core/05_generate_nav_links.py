@@ -57,50 +57,47 @@ import argparse
 import sys
 from pathlib import Path
 
-def generate_nav_links(folder_path_str, dry_run=False):
+def generate_nav_links_for_folder(folder_path, dry_run=False, stats=None):
     """
     Generates and appends previous/next navigation links to MD/MDX files
     in a folder based on the order specified in a _meta.json file.
-
-    Args:
-        folder_path_str (str): The path to the folder containing the files
-                               and _meta.json.
-        dry_run (bool): If True, only analyze without making changes
-        
-    Returns:
-        dict: Statistics about the processing
+    Recursively processes subfolders.
     """
-    stats = {
-        "total_files_found": 0,
-        "files_to_update": 0,
-        "files_updated": 0,
-        "skipped_files": 0,
-        "errors": 0
-    }
-    
-    folder_path = Path(folder_path_str)
+    if stats is None:
+        stats = {
+            "total_files_found": 0,
+            "files_to_update": 0,
+            "files_updated": 0,
+            "skipped_files": 0,
+            "errors": 0
+        }
+
+    folder_path = Path(folder_path)
     meta_file_path = folder_path / "_meta.json"
     base_folder_name = folder_path.name
 
     if not folder_path.is_dir():
-        print(f"⛔ Error: Folder not found at '{folder_path_str}'")
+        print(f"⛔ Error: Folder not found at '{folder_path}'")
         stats["errors"] += 1
         return stats
 
+    # Recursively process subfolders first
+    for child in folder_path.iterdir():
+        if child.is_dir():
+            generate_nav_links_for_folder(child, dry_run=dry_run, stats=stats)
+
     if not meta_file_path.is_file():
-        print(f"⛔ Error: '_meta.json' not found in '{folder_path_str}'")
-        stats["errors"] += 1
+        # Not an error if subfolder doesn't have _meta.json, just skip
         return stats
 
     try:
         with open(meta_file_path, 'r', encoding='utf-8') as f:
             meta_data = json.load(f)
 
-        # Assuming the list of files is the first value in the top-level dictionary
         if not meta_data or not isinstance(meta_data, dict):
-             print(f"⛔ Error: Invalid format in '{meta_file_path}'. Expected a dictionary.")
-             stats["errors"] += 1
-             return stats
+            print(f"⛔ Error: Invalid format in '{meta_file_path}'. Expected a dictionary.")
+            stats["errors"] += 1
+            return stats
 
         file_list_key = next(iter(meta_data))
         files_info = meta_data[file_list_key]
@@ -113,11 +110,11 @@ def generate_nav_links(folder_path_str, dry_run=False):
         # Sort files based on the 'order' key
         sorted_files = sorted(files_info, key=lambda x: x.get('order', float('inf')))
         num_files = len(sorted_files)
-        
-        stats["total_files_found"] = num_files
+
+        stats["total_files_found"] += num_files
 
         if num_files == 0:
-            print("ℹ️ No files found in the '_meta.json' list.")
+            print(f"ℹ️ No files found in the '_meta.json' list for '{base_folder_name}'.")
             return stats
 
         print(f"🔍 Found {num_files} files in '{base_folder_name}'...")
@@ -144,9 +141,9 @@ def generate_nav_links(folder_path_str, dry_run=False):
             next_file_name = next_item.get('file')
 
             if not prev_file_name or not next_file_name:
-                 print(f"⚠️ Warning: Missing file name for prev/next links for '{current_file_name}'. Skipping.")
-                 stats["skipped_files"] += 1
-                 continue
+                print(f"⚠️ Warning: Missing file name for prev/next links for '{current_file_name}'. Skipping.")
+                stats["skipped_files"] += 1
+                continue
 
             # Construct links - only using file names for same-folder linking
             prev_link = f"{prev_file_name}"
@@ -167,23 +164,27 @@ def generate_nav_links(folder_path_str, dry_run=False):
 ---
 """
             stats["files_to_update"] += 1
-            
+
             # In dry run mode, don't modify files
             if dry_run:
-                print(f"🔍 Would add navigation links to '{current_file_name}' (Previous: '{prev_file_name}', Next: '{next_file_name}')")
+                print(f"🔍 Would add navigation links to '{current_file_path}' (Previous: '{prev_file_name}', Next: '{next_file_name}')")
                 continue
-                
-            # Append to the file
+
+            # Remove any existing navigation snippet at the end before appending new one
             try:
-                with open(current_file_path, 'a', encoding='utf-8') as f:
-                    f.write(nav_snippet)
-                print(f"✅ Added navigation links to '{current_file_name}'")
+                with open(current_file_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+                # Remove previous nav snippet if present (very basic approach)
+                content = content.rsplit('\n---\n## Previous Article', 1)[0].rstrip()
+                with open(current_file_path, 'w', encoding='utf-8') as f:
+                    f.write(content + nav_snippet)
+                print(f"✅ Added navigation links to '{current_file_path}'")
                 stats["files_updated"] += 1
             except IOError as e:
                 print(f"⛔ Error writing to file '{current_file_path}': {e}")
                 stats["errors"] += 1
 
-        print("✅ Finished processing folder.")
+        print(f"✅ Finished processing folder '{base_folder_name}'.")
         return stats
 
     except json.JSONDecodeError as e:
@@ -195,7 +196,7 @@ def generate_nav_links(folder_path_str, dry_run=False):
     except Exception as e:
         print(f"⛔ An unexpected error occurred: {e}")
         stats["errors"] += 1
-    
+
     return stats
 
 def print_summary(stats, dry_run=False):
@@ -212,7 +213,7 @@ def print_summary(stats, dry_run=False):
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Append Previous/Next article links to MD/MDX files based on _meta.json.",
+        description="Append Previous/Next article links to MD/MDX files based on _meta.json (recursively for all subfolders).",
         formatter_class=argparse.RawTextHelpFormatter
     )
     parser.add_argument(
@@ -232,8 +233,8 @@ def main():
     args = parser.parse_args()
 
     # First do a dry run to gather statistics
-    print(f"Analyzing folder: {os.path.abspath(args.folder_path)}")
-    stats = generate_nav_links(args.folder_path, dry_run=True)
+    print(f"Analyzing folder: {os.path.abspath(args.folder_path)} (including subfolders)")
+    stats = generate_nav_links_for_folder(args.folder_path, dry_run=True)
     
     # Show the analysis results
     print_summary(stats, dry_run=True)
@@ -253,7 +254,7 @@ def main():
         
         # Proceed with actual processing
         print(f"\n🚀 Proceeding to update {stats['files_to_update']} files...")
-        final_stats = generate_nav_links(args.folder_path, dry_run=False)
+        final_stats = generate_nav_links_for_folder(args.folder_path, dry_run=False)
         
         # Display final statistics
         print_summary(final_stats)

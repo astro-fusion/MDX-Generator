@@ -213,19 +213,18 @@ def generate_meta_json(root_dir='.', output_file='_meta.json', dry_run=False, to
     if num_categories == 0:
         print(f"⚠️ Warning: No valid content directories found in {root_path}")
     
+    # Set output_path to be inside the root_dir, not the script/project folder
+    output_path = Path(root_dir).resolve() / output_file
+
     # In dry-run mode, don't save the file
     if dry_run:
-        output_path = Path(output_file)
-        print(f"\n🔍 Would generate: {output_path.resolve()}")
+        print(f"\n🔍 Would generate: {output_path}")
     else:
         # Save to file
-        output_path = Path(output_file)
-        
         try:
-            # The 'w' mode here ensures the file is overwritten if it exists
             with open(output_path, 'w', encoding='utf-8') as f:
                 json.dump(meta_structure, f, indent=2, ensure_ascii=False)
-            print(f"\n✅ Successfully generated: {output_path.resolve()}")
+            print(f"\n✅ Successfully generated: {output_path}")
         except Exception as e:
             print(f"⛔ Error writing to {output_path}: {e}")
             stats['errors'] += 1

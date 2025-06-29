@@ -51,19 +51,23 @@ from pathlib import Path
 
 def generate_index_from_meta(meta_file='_meta.json', output_file='index.mdx'):
     """Generate index.mdx file from the meta.json structure"""
-    
+
+    # Resolve meta_file path and set output_file in the same directory
+    meta_file_path = Path(meta_file).resolve()
+    output_file_path = meta_file_path.parent / output_file
+
     # Load meta data
     try:
-        if not os.path.exists(meta_file):
-            print(f"Warning: {meta_file} not found. Creating a default file.")
-            with open(meta_file, 'w', encoding='utf-8') as f:
+        if not meta_file_path.exists():
+            print(f"Warning: {meta_file_path} not found. Creating a default file.")
+            with open(meta_file_path, 'w', encoding='utf-8') as f:
                 json.dump({"Vedic Astrology": []}, f, indent=2)
         
-        with open(meta_file, 'r', encoding='utf-8') as f:
-            try:  # Fixed: properly indented try block
+        with open(meta_file_path, 'r', encoding='utf-8') as f:
+            try:
                 meta_data = json.load(f)
             except json.JSONDecodeError:
-                print(f"Error: {meta_file} contains invalid JSON. Using default empty structure.")
+                print(f"Error: {meta_file_path} contains invalid JSON. Using default empty structure.")
                 meta_data = {"Vedic Astrology": []}
     
     except Exception as e:
@@ -94,11 +98,11 @@ def generate_index_from_meta(meta_file='_meta.json', output_file='index.mdx'):
         process_children(category, content, 0)
         content.append("")  # Add spacing between categories
     
-    # Write to file
-    with open(output_file, 'w', encoding='utf-8') as f:
+    # Write to file in the same folder as meta_file
+    with open(output_file_path, 'w', encoding='utf-8') as f:
         f.write('\n'.join(content))
     
-    print(f"Generated {output_file} with {len(meta_data.get('Vedic Astrology', []))} main sections")
+    print(f"Generated {output_file_path} with {len(meta_data.get('Vedic Astrology', []))} main sections")
 
 def process_children(item, content, level):
     """Recursively process children items and add them to content"""

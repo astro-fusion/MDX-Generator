@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 def normalize_filename(filename):
     """
-    Convert a filename to URL-friendly format without changing case.
+    Convert a filename to URL-friendly format using underscores instead of spaces or dashes.
     
     Args:
         filename (str): Original filename
@@ -31,17 +31,17 @@ def normalize_filename(filename):
     name = name_parts[0]
     extension = name_parts[1] if len(name_parts) > 1 else ""
     
-    # Replace spaces with hyphens (preserve case)
-    name = name.replace(" ", "-")
+    # Replace spaces and dashes with underscores (preserve case)
+    name = name.replace(" ", "_").replace("-", "_")
     
-    # Remove special characters while preserving case
-    name = re.sub(r'[^a-zA-Z0-9\-_]', '', name)
+    # Remove special characters while preserving case and underscores
+    name = re.sub(r'[^a-zA-Z0-9_]', '', name)
     
-    # Replace multiple hyphens with single hyphen
-    name = re.sub(r'-+', '-', name)
+    # Replace multiple underscores with single underscore
+    name = re.sub(r'_+', '_', name)
     
-    # Remove leading/trailing hyphens
-    name = name.strip('-')
+    # Remove leading/trailing underscores
+    name = name.strip('_')
     
     # Rebuild filename with extension
     return name + extension
