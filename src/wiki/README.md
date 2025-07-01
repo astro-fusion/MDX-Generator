@@ -161,6 +161,13 @@ Feel free to extend this scraper for new categories, regions, or data sources!
 - **category_mapping.csv**  
   Maps Wikipedia list URLs to categories and metadata.
 
+ * config.py: Handles loading the scraping configuration.
+   * session.py: Manages HTTP sessions.
+   * parser.py: Contains HTML parsing and data extraction logic.
+   * storage.py: Handles data storage and progress state.
+   * utils.py: Includes miscellaneous utility functions.
+   * scraper.py: The main, refactored scraper class.
+   * cli.py: The command-line interface.
 ---
 
 ## 🧪 Testing & Improvements
