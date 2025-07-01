@@ -15,6 +15,7 @@ import secrets
 import string
 import os
 from pathlib import Path
+import glob
 
 # Set up logging
 logging.basicConfig(
@@ -256,161 +257,7 @@ class RobustWikiScraper:
         
         return not any(pattern in href.lower() for pattern in skip_patterns)
     
-    def extract_comprehensive_info(self, soup: BeautifulSoup) -> Dict:
-        """Extract comprehensive information from Wikipedia page."""
-        info = {
-            # Basic info
-            'full_name': None, 'birth_name': None, 'other_names': [],
-            # Birth/Death info
-            'date_of_birth': None, 'place_of_birth': None, 'birth_time': None,
-            'date_of_death': None, 'place_of_death': None,
-            # Personal details
-            'occupation': None, 'nationality': None, 'citizenship': [],
-            'religion': None, 'height': None, 'weight': None,
-            # Career info
-            'years_active': None, 'debut_work': None, 'debut_year': None,
-            # Family info
-            'spouse': [], 'children': [], 'parents': {}, 'siblings': [],
-            # External links
-            'external_urls': {}, 'social_media': {},
-            # Profile info
-            'profile_summary': None, 'short_bio': None,
-            'profile_image_url': None, 'profile_image_caption': None,
-            # Categories from page
-            'wikipedia_categories': []
-        }
-        
-        # Extract from infobox
-        self._extract_from_infobox(soup, info)
-        
-        # Extract profile image
-        self._extract_profile_image(soup, info)
-        
-        # Extract first paragraph as summary
-        self._extract_profile_summary(soup, info)
-        
-        # Extract Wikipedia categories
-        self._extract_wikipedia_categories(soup, info)
-        
-        # Extract external links
-        self._extract_external_links(soup, info)
-        
-        return info
     
-    def _extract_from_infobox(self, soup: BeautifulSoup, info: Dict):
-        """Extract information from Wikipedia infobox."""
-        infobox = soup.find('table', class_='infobox')
-        if not infobox:
-            return
-        
-        for row in infobox.find_all('tr'):
-            th = row.find('th')
-            td = row.find('td')
-            if not th or not td:
-                continue
-            
-            label = th.get_text(strip=True).lower()
-            value = td.get_text(" ", strip=True)
-            
-            # Birth information
-            if 'born' in label:
-                info['date_of_birth'] = self._parse_date(value)
-                info['place_of_birth'] = self._parse_place(value)
-            elif 'birth name' in label or 'birth_name' in label:
-                info['birth_name'] = value
-            elif 'other name' in label or 'also known as' in label:
-                info['other_names'] = [name.strip() for name in value.split(',')]
-            
-            # Death information
-            elif 'died' in label:
-                info['date_of_death'] = self._parse_date(value)
-                info['place_of_death'] = self._parse_place(value)
-            
-            # Personal details
-            elif 'occupation' in label:
-                info['occupation'] = value
-            elif 'nationality' in label:
-                info['nationality'] = value
-            elif 'citizenship' in label:
-                info['citizenship'] = [c.strip() for c in value.split(',')]
-            elif 'religion' in label:
-                info['religion'] = value
-            elif 'height' in label:
-                info['height'] = value
-            elif 'weight' in label:
-                info['weight'] = value
-            
-            # Career information
-            elif 'years active' in label:
-                info['years_active'] = value
-            elif 'debut' in label:
-                info['debut_work'] = value
-            
-            # Family information
-            elif 'spouse' in label or 'partner' in label:
-                info['spouse'] = self._parse_family_relations(value, 'spouse')
-            elif 'children' in label:
-                info['children'] = self._parse_family_relations(value, 'children')
-            elif 'parent' in label:
-                info['parents'] = self._parse_parents(value)
-    
-    def _extract_profile_image(self, soup: BeautifulSoup, info: Dict):
-        """Extract profile image from infobox."""
-        infobox = soup.find('table', class_='infobox')
-        if infobox:
-            img = infobox.find('img')
-            if img and img.get('src'):
-                src = img.get('src')
-                if src.startswith('//'):
-                    src = 'https:' + src
-                elif src.startswith('/'):
-                    src = 'https://en.wikipedia.org' + src
-                
-                info['profile_image_url'] = src
-                info['profile_image_caption'] = img.get('alt', '')
-    
-    def _extract_profile_summary(self, soup: BeautifulSoup, info: Dict):
-        """Extract profile summary from first paragraph."""
-        content_div = soup.find('div', class_='mw-parser-output')
-        if content_div:
-            paragraphs = content_div.find_all('p')
-            for para in paragraphs:
-                text = para.get_text(strip=True)
-                if len(text) > 50:
-                    info['profile_summary'] = text[:1000]
-                    info['short_bio'] = text[:300]
-                    break
-    
-    def _extract_wikipedia_categories(self, soup: BeautifulSoup, info: Dict):
-        """Extract categories from Wikipedia page."""
-        catlinks = soup.find('div', id='catlinks')
-        if catlinks:
-            categories = []
-            for link in catlinks.find_all('a'):
-                if link.get('href', '').startswith('/wiki/Category:'):
-                    category_name = link.get_text(strip=True)
-                    if category_name and 'births' not in category_name.lower():
-                        categories.append(category_name)
-            info['wikipedia_categories'] = categories
-    
-    def _extract_external_links(self, soup: BeautifulSoup, info: Dict):
-        """Extract external links and social media."""
-        external_section = soup.find('span', {'id': 'External_links'})
-        if external_section:
-            section = external_section.find_parent().find_next_sibling('ul')
-            if section:
-                for link in section.find_all('a', href=True):
-                    href = link['href']
-                    text = link.get_text(strip=True).lower()
-                    
-                    if 'imdb.com' in href:
-                        info['external_urls']['imdb'] = href
-                    elif 'instagram.com' in href:
-                        info['social_media']['instagram'] = href
-                    elif 'twitter.com' in href or 'x.com' in href:
-                        info['social_media']['twitter'] = href
-                    elif 'facebook.com' in href:
-                        info['social_media']['facebook'] = href
     
     def _parse_date(self, text: str) -> Optional[str]:
         """Parse dates from various formats."""
@@ -626,106 +473,7 @@ class RobustWikiScraper:
             logger.error(f"❌ Error loading progress state: {e}")
             return {}
     
-    def prepare_celebrities_csv(self) -> pd.DataFrame:
-        """Prepare celebrities data for CSV import to Supabase."""
-        csv_data = []
-        
-        for celebrity in self.celebrities_data:
-            csv_row = {
-                'public_id': celebrity.get('public_id'),
-                'wikipedia_id': celebrity.get('wikipedia_id'),
-                'wikipedia_slug': celebrity.get('wikipedia_slug'),
-                'wikipedia_url': celebrity.get('wikipedia_url'),
-                'name': celebrity.get('name'),
-                'full_name': celebrity.get('full_name'),
-                'birth_name': celebrity.get('birth_name'),
-                'other_names': json.dumps(celebrity.get('other_names', [])),
-                'date_of_birth': celebrity.get('date_of_birth'),
-                'birth_date_parsed': celebrity.get('birth_date_parsed'),
-                'place_of_birth': celebrity.get('place_of_birth'),
-                'birth_time': celebrity.get('birth_time'),
-                'birth_coordinates_lat': celebrity.get('birth_coordinates_lat'),
-                'birth_coordinates_lng': celebrity.get('birth_coordinates_lng'),
-                'birth_timezone': celebrity.get('birth_timezone'),
-                'date_of_death': celebrity.get('date_of_death'),
-                'death_date_parsed': celebrity.get('death_date_parsed'),
-                'place_of_death': celebrity.get('place_of_death'),
-                'death_coordinates_lat': celebrity.get('death_coordinates_lat'),
-                'death_coordinates_lng': celebrity.get('death_coordinates_lng'),
-                'occupation': celebrity.get('occupation'),
-                'nationality': celebrity.get('nationality'),
-                'citizenship': json.dumps(celebrity.get('citizenship', [])),
-                'religion': celebrity.get('religion'),
-                'zodiac_sign': celebrity.get('zodiac_sign'),
-                'height': celebrity.get('height'),
-                'weight': celebrity.get('weight'),
-                'eye_color': celebrity.get('eye_color'),
-                'hair_color': celebrity.get('hair_color'),
-                'profile_summary': celebrity.get('profile_summary'),
-                'short_bio': celebrity.get('short_bio'),
-                'profile_image_url': celebrity.get('profile_image_url'),
-                'profile_image_caption': celebrity.get('profile_image_caption'),
-                'spouse': json.dumps(celebrity.get('spouse', [])),
-                'children': json.dumps(celebrity.get('children', [])),
-                'parents': json.dumps(celebrity.get('parents', {})),
-                'siblings': json.dumps(celebrity.get('siblings', [])),
-                'years_active': celebrity.get('years_active'),
-                'debut_work': celebrity.get('debut_work'),
-                'debut_year': celebrity.get('debut_year'),
-                'awards': json.dumps(celebrity.get('awards', [])),
-                'notable_works': json.dumps(celebrity.get('notable_works', [])),
-                'external_urls': json.dumps(celebrity.get('external_urls', {})),
-                'social_media': json.dumps(celebrity.get('social_media', {})),
-                'is_verified': celebrity.get('is_verified', False),
-                'verification_source': celebrity.get('verification_source'),
-                'time_verified': celebrity.get('time_verified'),
-                'data_quality_score': celebrity.get('data_quality_score', 0),
-                'last_updated': celebrity.get('last_updated'),
-                'created_at': celebrity.get('created_at')
-            }
-            
-            csv_data.append(csv_row)
-        
-        return pd.DataFrame(csv_data)
     
-    def prepare_categories_csv(self) -> pd.DataFrame:
-        """Prepare categories for CSV import."""
-        categories_set = set()
-        
-        for celebrity_cat in self.celebrity_categories_data:
-            category_name = celebrity_cat['category_name']
-            category_group = self.get_category_group(category_name)
-            
-            categories_set.add((
-                category_name,
-                self.create_category_slug(category_name),
-                f"Category for {category_name} professionals",
-                category_group,
-                True,
-                datetime.now().isoformat()
-            ))
-        
-        df = pd.DataFrame(list(categories_set), columns=[
-            'category_name', 'category_slug', 'category_description',
-            'category_group', 'is_active', 'created_at'
-        ])
-        
-        return df
-    
-    def prepare_celebrity_categories_csv(self) -> pd.DataFrame:
-        """Prepare celebrity-category relationships for CSV import."""
-        csv_data = []
-        for rel in self.celebrity_categories_data:
-            csv_data.append({
-                'celebrity_public_id': rel['celebrity_public_id'],
-                'category_name': rel['category_name'],
-                'is_primary': rel['is_primary'],
-                'confidence_score': rel['confidence_score'],
-                'source': rel['source'],
-                'added_at': rel['added_at']
-            })
-        
-        return pd.DataFrame(csv_data)
     
     def create_category_slug(self, category_name: str) -> str:
         """Create URL-friendly category slug."""
@@ -831,75 +579,96 @@ def main():
     """Main function with enhanced CLI interface."""
     print("🎬 Robust Wikipedia Celebrity Scraper v3.0")
     print("=" * 60)
-    
-    # Get configuration file
-    config_file = input("📁 Enter config file path (Enter for 'scraping_config.json'): ").strip()
-    if not config_file:
-        config_file = 'scraping_config.json'
-    
-    # Initialize scraper
-    try:
-        scraper = RobustWikiScraper(config_file)
-    except Exception as e:
-        print(f"❌ Error initializing scraper: {e}")
-        return
-    
-    # Get URLs from category mapping
-    urls = list(scraper.category_mapping.keys())
-    
-    if not urls:
-        print("❌ No URLs found in category mapping!")
-        return
-    
-    print(f"📋 Found {len(urls)} URLs in category mapping:")
-    for i, url in enumerate(urls, 1):
-        category_info = scraper.category_mapping[url]
-        print(f"  {i:2d}. {category_info['category_name']} ({category_info['region']}) - {url}")
-    
-    # Get user preferences
-    print("\n🔧 Scraping Options:")
-    
-    try:
-        limit_input = input("🔢 Enter limit per URL for testing (Enter for no limit): ").strip()
-        limit = int(limit_input) if limit_input else None
-    except ValueError:
-        limit = None
-    
-    # URL selection
-    url_selection = input("🎯 Scrape all URLs or select specific ones? [all/select]: ").lower().strip()
-    
-    if url_selection == 'select':
-        print("📝 Select URLs (comma-separated numbers, e.g., 1,3,5):")
+
+    # List all CSV files in the List folder
+    list_folder = Path(__file__).parent / "List"
+    csv_files = sorted(list_folder.glob("*.csv"))
+    print(f"📁 Found {len(csv_files)} CSV files in {list_folder}:")
+    total_rows = 0
+    file_rows = []
+    for csv_file in csv_files:
         try:
-            selection = input("Selection: ").strip()
-            indices = [int(x.strip()) - 1 for x in selection.split(',')]
-            selected_urls = [urls[i] for i in indices if 0 <= i < len(urls)]
-            urls = selected_urls
-            print(f"✅ Selected {len(urls)} URLs")
-        except (ValueError, IndexError):
-            print("⚠️ Invalid selection, using all URLs")
-    
-    # Confirm and start
-    print(f"\n🚀 Ready to scrape {len(urls)} URLs")
-    print(f"⚙️ Rate limit: {scraper.config['rate_limit']['delay_between_requests']}s between requests")
-    print(f"📁 Output directory: {scraper.output_dir}")
-    
-    start_input = input("\n▶️  Start scraping? (y/n): ").lower()
-    if start_input != 'y':
-        print("🛑 Scraping cancelled")
+            df = pd.read_csv(csv_file)
+            row_count = len(df)
+            print(f"  - {csv_file.name}: {row_count} rows")
+            total_rows += row_count
+            file_rows.append((csv_file, row_count))
+        except Exception as e:
+            print(f"  - {csv_file.name}: Error reading file ({e})")
+    print(f"\n📊 Total number of list items to download: {total_rows}")
+
+    # Ask user to continue
+    proceed = input("\n▶️  Continue with download? (y/n): ").lower()
+    if proceed != 'y':
+        print("🛑 Exiting.")
         return
-    
-    # Start scraping
-    try:
-        scraper.scrape_from_urls(urls, limit=limit)
-        print(f"\n🎉 Scraping completed successfully!")
-        print(f"📂 Check output files in: {scraper.output_dir}")
-    except KeyboardInterrupt:
-        print("\n⚠️ Scraping interrupted by user")
-        print("📊 Progress has been saved and can be resumed later")
-    except Exception as e:
-        logger.error(f"❌ Error during scraping: {e}")
-        print(f"❌ Scraping failed: {e}")
+
+    # Now process each file in order
+    for csv_file, row_count in file_rows:
+        output_file = Path("scraped_data") / f"{csv_file.stem}_celebrities.csv"
+        if output_file.exists():
+            print(f"⏭️  Skipping {csv_file.name} (output already exists)")
+            continue
+        
+        # Initialize scraper for each file
+        try:
+            scraper = RobustWikiScraper()
+        except Exception as e:
+            print(f"❌ Error initializing scraper: {e}")
+            return
+        
+        # Get URLs from category mapping
+        urls = list(scraper.category_mapping.keys())
+        
+        if not urls:
+            print("❌ No URLs found in category mapping!")
+            return
+        
+        print(f"📋 Found {len(urls)} URLs in category mapping:")
+        for i, url in enumerate(urls, 1):
+            category_info = scraper.category_mapping[url]
+            print(f"  {i:2d}. {category_info['category_name']} ({category_info['region']}) - {url}")
+        
+        # Get user preferences
+        print("\n🔧 Scraping Options:")
+        
+        limit = None  # No limit by default
+        
+        # URL selection
+        url_selection = input("🎯 Scrape all URLs or select specific ones? [all/select]: ").lower().strip()
+        
+        if url_selection == 'select':
+            print("📝 Select URLs (comma-separated numbers, e.g., 1,3,5):")
+            try:
+                selection = input("Selection: ").strip()
+                indices = [int(x.strip()) - 1 for x in selection.split(',')]
+                selected_urls = [urls[i] for i in indices if 0 <= i < len(urls)]
+                urls = selected_urls
+                print(f"✅ Selected {len(urls)} URLs")
+            except (ValueError, IndexError):
+                print("⚠️ Invalid selection, using all URLs")
+        
+        # Confirm and start
+        print(f"\n🚀 Ready to scrape {len(urls)} URLs")
+        print(f"⚙️ Rate limit: {scraper.config['rate_limit']['delay_between_requests']}s between requests")
+        print(f"📁 Output directory: {scraper.output_dir}")
+        
+        start_input = input("\n▶️  Start scraping? (y/n): ").lower()
+        if start_input != 'y':
+            print("🛑 Scraping cancelled")
+            return
+        
+        # Start scraping
+        try:
+            scraper.scrape_from_urls(urls, limit=limit)
+            print(f"\n🎉 Scraping completed successfully!")
+            print(f"📂 Check output files in: {scraper.output_dir}")
+        except KeyboardInterrupt:
+            print("\n⚠️ Scraping interrupted by user")
+            print("📊 Progress has been saved and can be resumed later")
+        except Exception as e:
+            logger.error(f"❌ Error during scraping: {e}")
+            print(f"❌ Scraping failed: {e}")
 
 if __name__ == "__main__":
     main()

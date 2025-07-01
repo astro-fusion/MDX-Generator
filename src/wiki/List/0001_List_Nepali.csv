@@ -1,0 +1,10 @@
+url,category_name,category_group,category_description,is_primary,region,language
+"https://en.wikipedia.org/wiki/List_of_Nepali_singers","Nepali Singer","Music & Culture","Nepali music artists",true,"Nepal","Nepali"
+"https://en.wikipedia.org/wiki/List_of_Nepali_actors","Nepali Film Actor","Entertainment & Media","Nepali film industry actors",true,"Nepal","Nepali"
+"https://en.wikipedia.org/wiki/List_of_Nepali_businesspeople","Nepali Businessperson","Business & Entrepreneurship","Nepali business leaders",true,"Nepal","Nepali"
+"https://en.wikipedia.org/wiki/List_of_prime_ministers_of_Nepal","Nepali Prime Minister","Politics & Government","Prime Ministers of Nepal",true,"Nepal","Nepali"
+"https://en.wikipedia.org/wiki/List_of_presidents_of_Nepal","Nepal President","Politics & Government","Presidents of Nepal",true,"Nepal","Nepali"
+"https://en.wikipedia.org/wiki/List_of_Nepali_footballers","Nepali Football Player","Sports & Games","Nepali football players",true,"Nepal","Nepali"
+"https://en.wikipedia.org/wiki/List_of_Nepalese_cricketers","Nepali Cricketer","Sports & Games","Nepali cricket players",true,"Nepal","Nepali"
+"https://en.wikipedia.org/wiki/List_of_Nepali_YouTubers","Nepali YouTuber","Digital Media","Nepali YouTube content creators",true,"Nepal","Nepali"
+"https://en.wikipedia.org/wiki/List_of_Nepali_chefs","Nepali Chef","Culinary Arts","Nepali celebrity chefs",true,"Nepal","Nepali"

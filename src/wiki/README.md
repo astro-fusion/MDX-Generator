@@ -128,3 +128,44 @@ The scraper automatically saves progress and can resume from interruptions.
 ## 🤝 Contributing
 
 Feel free to extend this scraper for new categories, regions, or data sources!
+
+## 🗂️ Project Structure & Module Descriptions
+
+- **wikiDownloader.py**  
+  Main entrypoint. Runs the CLI and orchestrates the scraping process using all helper modules.
+
+- **cli.py**  
+  Command-line interface. Handles user prompts, file listing, and launches the scraping workflow.
+
+- **scraper.py**  
+  Core scraping logic. Contains the `RobustWikiScraper` class, manages sessions, rate limiting, progress saving, and batch processing.
+
+- **celebrity_parser.py**  
+  All parsing logic for extracting structured data from Wikipedia HTML using BeautifulSoup. Handles infobox, summary, categories, and external links.
+
+- **category_mapping.py**  
+  Loads and parses the category mapping CSV, providing metadata for each Wikipedia list URL.
+
+- **scraper_config.py**  
+  Loads and manages the scraping configuration from JSON, including rate limits and output directories.
+
+- **wiki_utils.py**  
+  Utility functions for safe BeautifulSoup element access and parsing.
+
+- **List/**  
+  Folder containing all CSV files with Wikipedia list URLs to scrape.
+
+- **scraping_config.json**  
+  Main configuration file for the scraper.
+
+- **category_mapping.csv**  
+  Maps Wikipedia list URLs to categories and metadata.
+
+---
+
+## 🧪 Testing & Improvements
+
+- Each module is now independently testable.
+- You can write unit tests for parsing, config, and mapping logic.
+- The CLI and scraper are decoupled for easier extension.
+- All CSV output is ready for Supabase import.

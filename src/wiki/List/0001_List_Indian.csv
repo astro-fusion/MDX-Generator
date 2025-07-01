@@ -1,0 +1,13 @@
+url,category_name,category_group,category_description,is_primary,region,language
+"https://en.wikipedia.org/wiki/List_of_Hindi_film_actors","Hindi Film Actor","Entertainment & Media","Actors primarily working in Hindi cinema (Bollywood)",true,"India","Hindi"
+"https://en.wikipedia.org/wiki/List_of_Indian_male_film_actors","Hindi Film Actor","Entertainment & Media","Male actors in Indian cinema",false,"India","Hindi"
+"https://en.wikipedia.org/wiki/List_of_Indian_film_actresses","Hindi Film Actress","Entertainment & Media","Female actors in Indian cinema",false,"India","Hindi"
+"https://en.wikipedia.org/wiki/List_of_Indian_models","Indian Model","Fashion & Beauty","Indian fashion models",true,"India","English"
+"https://en.wikipedia.org/wiki/List_of_Miss_India_winners","Miss India Winner","Fashion & Beauty","Miss India pageant winners",false,"India","English"
+"https://en.wikipedia.org/wiki/List_of_Indian_television_actors","Indian TV Actor","Entertainment & Media","Indian television actors",true,"India","English"
+"https://en.wikipedia.org/wiki/List_of_Indian_soap_opera_actors","Indian Soap Actor","Entertainment & Media","Indian soap opera actors",false,"India","English"
+"https://en.wikipedia.org/wiki/List_of_reality_show_participants","Reality TV Star","Entertainment & Media","Reality show participants",false,"India","English"
+"https://en.wikipedia.org/wiki/List_of_Indian_child_actors","Indian Child Actor","Entertainment & Media","Indian child actors",false,"India","English"
+"https://en.wikipedia.org/wiki/List_of_Hindustani_classical_singers","Hindustani Classical Singer","Music & Culture","Hindustani classical music vocalists",true,"India","Hindi"
+"https://en.wikipedia.org/wiki/List_of_Carnatic_musicians","Carnatic Musician","Music & Culture","Carnatic classical musicians",true,"India","Tamil"
+"https://en.wikipedia.org/wiki/List_of_Indian_classical_dancers","Indian Classical Dancer","Music & Culture","Indian classical dance performers",true,"India","English"

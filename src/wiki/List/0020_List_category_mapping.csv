@@ -1,7 +1,4 @@
 url,category_name,category_group,category_description,is_primary,region,language
-"https://en.wikipedia.org/wiki/List_of_Hindi_film_actors","Hindi Film Actor","Entertainment & Media","Actors primarily working in Hindi cinema (Bollywood)",true,"India","Hindi"
-"https://en.wikipedia.org/wiki/List_of_Indian_male_film_actors","Hindi Film Actor","Entertainment & Media","Male actors in Indian cinema",false,"India","Hindi"
-"https://en.wikipedia.org/wiki/List_of_Indian_film_actresses","Hindi Film Actress","Entertainment & Media","Female actors in Indian cinema",false,"India","Hindi"
 "https://en.wikipedia.org/wiki/List_of_Telugu_actors","Telugu Film Actor","Regional Cinema","Actors in Telugu cinema industry",true,"India","Telugu"
 "https://en.wikipedia.org/wiki/List_of_Tamil_actors","Tamil Film Actor","Regional Cinema","Actors in Tamil cinema industry",true,"India","Tamil"
 "https://en.wikipedia.org/wiki/List_of_Malayalam_actors","Malayalam Film Actor","Regional Cinema","Actors in Malayalam cinema industry",true,"India","Malayalam"
