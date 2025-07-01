@@ -1,0 +1,23 @@
+{
+  "project_name": "wikipedia_celebrity_scraper",
+  "output_directory": "scraped_data",
+  "rate_limit": {
+    "requests_per_minute": 20,
+    "delay_between_requests": 2.0,
+    "delay_between_batches": 10.0
+  },
+  "scraping": {
+    "max_retries": 3,
+    "timeout": 15,
+    "user_agent": "RobustWikiScraper/3.0 (Educational Purpose)"
+  },
+  "incremental": {
+    "save_after_each_url": true,
+    "backup_interval": 50,
+    "resume_on_restart": true
+  },
+  "categories": {
+    "mapping_file": "category_mapping.csv",
+    "auto_detect": true
+  }
+}

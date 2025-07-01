@@ -1,6 +1,10 @@
 # Core dependencies
 requests>=2.31.0
 python-dotenv>=1.0.0
+beautifulsoup4>=4.12.0
+pandas>=2.0.0
+lxml>=4.9.0
+wikipedia>=1.4.0
 
 # GUI dependencies (tkinter is built-in to Python)
 # Note: tkinterdnd2 is optional and often problematic on macOS
